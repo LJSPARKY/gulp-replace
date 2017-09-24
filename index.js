@@ -9,29 +9,31 @@ module.exports = function(search, _replacement, options) {
     objectMode: true,
     transform: function(file, enc, callback) {
       if (file.isNull()) {
-        return callback(null, file);
+        return callback(null, null);
       }
-      
+
       var replacement = _replacement;
       if (typeof _replacement === 'function') {
         // Pass the vinyl file object as this.file
         replacement = _replacement.bind({ file: file });
       }
-      
+
       function doReplace() {
+        var result;
+
         if (file.isStream()) {
+          // TODO - compare streams
           file.contents = file.contents.pipe(rs(search, replacement));
           return callback(null, file);
         }
 
         if (file.isBuffer()) {
           if (search instanceof RegExp) {
-            file.contents = new Buffer(String(file.contents).replace(search, replacement));
+            result = String(file.contents).replace(search, replacement);
           }
           else {
             var chunks = String(file.contents).split(search);
 
-            var result;
             if (typeof replacement === 'function') {
               // Start with the first chunk already in the result
               // Replacements will be added thereafter
@@ -52,23 +54,25 @@ module.exports = function(search, _replacement, options) {
             else {
               result = chunks.join(replacement);
             }
-
-            file.contents = new Buffer(result);
           }
-          return callback(null, file);
+
+          if (file.contents != result) {
+            file.contents = new Buffer(result);
+            return callback(null, file);
+          }
         }
 
-        callback(null, file);
+        callback(null, null);
       }
 
       if (options && options.skipBinary) {
         istextorbinary.isText(file.path, file.contents, function(err, result) {
           if (err) {
-            return callback(err, file);
+            return callback(err, null);
           }
 
           if (!result) {
-            callback(null, file);
+            callback(null, null);
           } else {
             doReplace();
           }
